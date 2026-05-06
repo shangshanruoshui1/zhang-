@@ -1,0 +1,21 @@
+{
+  "name": "多米诺因果链",
+  "short_name": "因果链",
+  "description": "一个简单的多米诺骨牌思维工具",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#EAF2EB",
+  "theme_color": "#52A081",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

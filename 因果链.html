@@ -1,0 +1,535 @@
+
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>沉浸式多米诺因果链</title>
+  <style>
+    :root {
+      --bg-color: #EAF2EB;
+      --dot-color: #e5e7eb;
+      --card-bg: #FAFCFA;
+      --primary: #52A081;
+      --text-main: #2D4035;
+      --text-muted: #6B8274;
+      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+      --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+      --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background-color: var(--bg-color);
+      /* 沉浸式网格背景 */
+      background-image: radial-gradient(var(--dot-color) 1.5px, transparent 1.5px);
+      background-size: 24px 24px;
+      overflow: hidden; /* 防止出现滚动条 */
+      user-select: none;
+    }
+
+    /* 顶部提示 */
+    .header {
+      position: absolute;
+      top: 20px;
+      left: 24px;
+      z-index: 100;
+      pointer-events: none;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 24px;
+      color: var(--text-main);
+      font-weight: 600;
+      letter-spacing: 1px;
+    }
+    .header p {
+      margin: 6px 0 0 0;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    #canvasArea {
+      position: absolute;
+      width: 100vw;
+      height: 100vh;
+      top: 0; left: 0;
+    }
+
+    #arrowCanvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    /* 骨牌卡片样式 */
+    .domino {
+      position: absolute;
+      width: 160px;
+      min-height: 60px;
+      background: var(--card-bg);
+      border-radius: 12px;
+      box-shadow: var(--shadow-md);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      box-sizing: border-box;
+      cursor: grab;
+      z-index: 2;
+      border: 2px solid transparent;
+      transition: box-shadow 0.2s ease, border-color 0.2s ease;
+      animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    
+    @keyframes popIn {
+      0% { transform: scale(0.8); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    .domino:hover {
+      box-shadow: var(--shadow-lg);
+    }
+    .domino:active {
+      cursor: grabbing;
+    }
+    .domino.selected {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.2);
+      z-index: 3;
+    }
+
+    .domino-text {
+      font-size: 15px;
+      color: var(--text-main);
+      text-align: center;
+      word-wrap: break-word;
+      line-height: 1.4;
+      pointer-events: none;
+    }
+
+    .domino textarea {
+      width: 100%;
+      height: 100%;
+      border: none;
+      outline: none;
+      resize: none;
+      font-size: 15px;
+      text-align: center;
+      font-family: inherit;
+      color: var(--text-main);
+      background: transparent;
+      line-height: 1.4;
+    }
+
+    /* 现代化右键菜单 */
+    .context-menu {
+      position: absolute;
+      background: var(--card-bg);
+      border-radius: 8px;
+      box-shadow: var(--shadow-lg);
+      padding: 6px;
+      z-index: 1000;
+      display: none;
+      min-width: 140px;
+      border: 1px solid #f3f4f6;
+    }
+    .context-menu div {
+      padding: 10px 12px;
+      font-size: 14px;
+      color: var(--text-main);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .context-menu div:hover {
+      background: #f3f4f6;
+    }
+    .context-menu div.danger {
+      color: #ef4444;
+    }
+    .context-menu div.danger:hover {
+      background: #fef2f2;
+    }
+
+    /* 连线模式提示 */
+    #modeTip {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--text-main);
+      color: white;
+      padding: 10px 20px;
+      border-radius: 30px;
+      font-size: 14px;
+      box-shadow: var(--shadow-md);
+      display: none;
+      z-index: 100;
+    }
+  </style>
+  <!-- 引入 PWA 配置 -->
+	<link rel="manifest" href="./manifest.json">
+	<meta name="theme-color" content="#52A081">
+	<!-- iOS 专用图标支持 -->
+	<link rel="apple-touch-icon" href="icon.png">
+	<meta name="apple-mobile-web-app-capable" content="yes">
+	<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+	<script>
+	  // 注册离线服务
+	  if ('serviceWorker' in navigator) {
+	    window.addEventListener('load', () => {
+	      navigator.serviceWorker.register('./sw.js').then(reg => {
+	        console.log('离线模式已启用');
+	      });
+	    });
+	  }
+	</script>
+</head>
+<body>
+
+  <div class="header">
+    <h1>多米诺因果链</h1>
+    <p><b>双击空白</b>：添加骨牌 ｜ <b>双击骨牌</b>：编辑文字 ｜ <b>右键骨牌</b>：连线或删除</p>
+  </div>
+
+  <div id="modeTip">请点击要连接的目标骨牌 (按 ESC 取消)</div>
+
+  <div id="canvasArea">
+    <canvas id="arrowCanvas"></canvas>
+  </div>
+
+  <div class="context-menu" id="contextMenu">
+    <div id="menuConnect">➡️ 连线到...</div>
+    <div id="menuAddChild">➕ 衍生子骨牌</div>
+    <div class="danger" id="menuDelete">🗑️ 删除</div>
+  </div>
+
+  <script>
+    // --- 数据状态 ---
+    let dominoes = {};
+    let curves = []; // { id, from, to }
+    let nextId = 1;
+    let curveId = 1;
+
+    // --- 交互状态 ---
+    let selectedId = null;
+    let draggingId = null;
+    let dragOffset = { x: 0, y: 0 };
+    let connectingFromId = null;
+
+    // --- DOM 元素 ---
+    const canvasArea = document.getElementById('canvasArea');
+    const arrowCanvas = document.getElementById('arrowCanvas');
+    const ctx = arrowCanvas.getContext('2d');
+    const contextMenu = document.getElementById('contextMenu');
+    const modeTip = document.getElementById('modeTip');
+
+    let contextTargetId = null;
+
+    // --- 初始化画布大小 ---
+    function resizeCanvas() {
+      arrowCanvas.width = window.innerWidth;
+      arrowCanvas.height = window.innerHeight;
+      drawArrows();
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    // --- 核心操作函数 ---
+    function createDomino(x, y, text = "新事件") {
+      const id = nextId++;
+      const dom = document.createElement('div');
+      dom.className = 'domino';
+      dom.id = `domino-${id}`;
+      // 初始化位置
+      updateDominoPosition(dom, x, y);
+      
+      const textDiv = document.createElement('div');
+      textDiv.className = 'domino-text';
+      textDiv.innerText = text;
+      dom.appendChild(textDiv);
+
+      dominoes[id] = { id, x, y, text, dom, textDiv };
+      canvasArea.appendChild(dom);
+
+      bindDominoEvents(dom, id);
+      return id;
+    }
+
+    function updateDominoPosition(dom, x, y) {
+      dom.style.left = x + 'px';
+      dom.style.top = y + 'px';
+    }
+
+    function addCurve(fromId, toId) {
+      // 避免重复连线和自连
+      if (fromId === toId || curves.some(c => c.from === fromId && c.to === toId)) return;
+      curves.push({ id: curveId++, from: fromId, to: toId });
+      drawArrows();
+    }
+
+    function deleteDomino(id) {
+      if (!dominoes[id]) return;
+      canvasArea.removeChild(dominoes[id].dom);
+      delete dominoes[id];
+      // 删除相关连线
+      curves = curves.filter(c => c.from !== id && c.to !== id);
+      drawArrows();
+    }
+
+    // --- 事件绑定 ---
+    function bindDominoEvents(dom, id) {
+      // 鼠标按下 (拖拽 / 选中 / 连线目标)
+      dom.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return; // 仅左键
+        e.stopPropagation();
+        
+        hideContextMenu();
+
+        if (connectingFromId) {
+          addCurve(connectingFromId, id);
+          cancelConnectMode();
+          return;
+        }
+
+        selectDomino(id);
+        draggingId = id;
+        const rect = dom.getBoundingClientRect();
+        dragOffset = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      });
+
+      // 双击编辑
+      dom.addEventListener('dblclick', (e) => {
+        e.stopPropagation();
+        enterEditMode(id);
+      });
+
+      // 右键菜单
+      dom.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        selectDomino(id);
+        contextTargetId = id;
+        contextMenu.style.left = e.clientX + 'px';
+        contextMenu.style.top = e.clientY + 'px';
+        contextMenu.style.display = 'block';
+      });
+    }
+
+    // 编辑模式
+    function enterEditMode(id) {
+      const node = dominoes[id];
+      if (!node) return;
+      
+      const input = document.createElement('textarea');
+      input.value = node.text;
+      
+      node.dom.innerHTML = '';
+      node.dom.appendChild(input);
+      input.focus();
+
+      // 选中文本
+      input.setSelectionRange(0, input.value.length);
+
+      const finishEdit = () => {
+        const newVal = input.value.trim() || "未命名";
+        node.text = newVal;
+        node.textDiv.innerText = newVal;
+        node.dom.innerHTML = '';
+        node.dom.appendChild(node.textDiv);
+      };
+
+      input.addEventListener('blur', finishEdit);
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          input.blur();
+        }
+      });
+    }
+
+    function selectDomino(id) {
+      if (selectedId && dominoes[selectedId]) {
+        dominoes[selectedId].dom.classList.remove('selected');
+      }
+      selectedId = id;
+      if (id && dominoes[id]) {
+        dominoes[id].dom.classList.add('selected');
+      }
+    }
+
+    // --- 全局事件 ---
+    // 拖拽逻辑
+    window.addEventListener('mousemove', (e) => {
+      if (draggingId) {
+        const node = dominoes[draggingId];
+        let newX = e.clientX - dragOffset.x;
+        let newY = e.clientY - dragOffset.y;
+        
+        // 边界限制
+        newX = Math.max(0, Math.min(newX, window.innerWidth - 160));
+        newY = Math.max(0, Math.min(newY, window.innerHeight - 60));
+
+        node.x = newX;
+        node.y = newY;
+        updateDominoPosition(node.dom, newX, newY);
+        drawArrows(); // 实时更新连线
+      }
+    });
+
+    window.addEventListener('mouseup', () => {
+      draggingId = null;
+    });
+
+    // 点击空白处
+    canvasArea.addEventListener('mousedown', (e) => {
+      if (e.target === canvasArea || e.target === arrowCanvas) {
+        selectDomino(null);
+        hideContextMenu();
+        if (connectingFromId) cancelConnectMode();
+      }
+    });
+
+    // 双击空白处添加骨牌
+    canvasArea.addEventListener('dblclick', (e) => {
+      if (e.target === canvasArea || e.target === arrowCanvas) {
+        createDomino(e.clientX - 80, e.clientY - 30);
+      }
+    });
+
+    // 取消连线模式
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        cancelConnectMode();
+      }
+    });
+
+    // --- 菜单操作 ---
+    function hideContextMenu() {
+      contextMenu.style.display = 'none';
+    }
+
+    document.getElementById('menuConnect').addEventListener('click', () => {
+      connectingFromId = contextTargetId;
+      modeTip.style.display = 'block';
+      canvasArea.style.cursor = 'crosshair';
+      hideContextMenu();
+    });
+
+    document.getElementById('menuAddChild').addEventListener('click', () => {
+      const parent = dominoes[contextTargetId];
+      // 在右侧稍下位置生成子节点
+      const childX = parent.x + 220;
+      const childY = parent.y + (Math.random() * 40 - 20);
+      const childId = createDomino(childX, childY, "后续影响");
+      addCurve(parent.id, childId);
+      hideContextMenu();
+    });
+
+    document.getElementById('menuDelete').addEventListener('click', () => {
+      deleteDomino(contextTargetId);
+      hideContextMenu();
+    });
+
+    function cancelConnectMode() {
+      connectingFromId = null;
+      modeTip.style.display = 'none';
+      canvasArea.style.cursor = 'default';
+    }
+
+    // --- 智能连线绘制 ---
+    function drawArrows() {
+      ctx.clearRect(0, 0, arrowCanvas.width, arrowCanvas.height);
+      ctx.lineWidth = 2.5;
+      
+      curves.forEach(curve => {
+        const from = dominoes[curve.from];
+        const to = dominoes[curve.to];
+        if (!from || !to) return;
+
+        // 智能计算连接点 (中心点连线，但从边缘发出)
+        const fRect = from.dom.getBoundingClientRect();
+        const tRect = to.dom.getBoundingClientRect();
+
+        // 默认从起点右侧 到 终点左侧
+        let x1 = fRect.right;
+        let y1 = fRect.top + fRect.height / 2;
+        let x2 = tRect.left;
+        let y2 = tRect.top + tRect.height / 2;
+
+        // 如果终点在起点正下方或正上方很多，改变连接点逻辑
+        if (Math.abs(tRect.left - fRect.left) < 100 && tRect.top > fRect.bottom) {
+          x1 = fRect.left + fRect.width / 2;
+          y1 = fRect.bottom;
+          x2 = tRect.left + tRect.width / 2;
+          y2 = tRect.top;
+        }
+
+        // 绘制贝塞尔曲线
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        
+        // 控制点逻辑：根据两点距离动态调整弯曲度
+        const dist = Math.abs(x2 - x1);
+        const cpOffset = Math.max(dist / 2, 40);
+        
+        let cp1x = x1 + cpOffset;
+        let cp2x = x2 - cpOffset;
+        
+        // 如果是上下连接
+        if (y1 === fRect.bottom && y2 === tRect.top) {
+            cp1x = x1;
+            let cp1y = y1 + Math.abs(y2 - y1)/2;
+            cp2x = x2;
+            let cp2y = y2 - Math.abs(y2 - y1)/2;
+            ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, x2, y2);
+        } else {
+            ctx.bezierCurveTo(cp1x, y1, cp2x, y2, x2, y2);
+        }
+
+        // 渐变色线条
+        const gradient = ctx.createLinearGradient(x1, y1, x2, y2);
+        gradient.addColorStop(0, '#9ca3af'); // 起点灰色
+        gradient.addColorStop(1, '#3b82f6'); // 终点蓝色
+        ctx.strokeStyle = gradient;
+        ctx.stroke();
+
+        // 绘制箭头
+        drawArrowHead(ctx, x2, y2, cp2x, y2, y1 === fRect.bottom && y2 === tRect.top);
+      });
+    }
+
+    // 绘制箭头头部
+    function drawArrowHead(ctx, x, y, cpx, cpy, isVertical) {
+      ctx.fillStyle = '#3b82f6';
+      ctx.beginPath();
+      
+      let angle = Math.atan2(y - cpy, x - cpx);
+      if (isVertical) {
+          angle = Math.PI / 2; // 向下
+      }
+
+      const len = 12; // 箭头大小
+      ctx.moveTo(x, y);
+      ctx.lineTo(x - len * Math.cos(angle - 0.35), y - len * Math.sin(angle - 0.35));
+      ctx.lineTo(x - len * Math.cos(angle + 0.35), y - len * Math.sin(angle + 0.35));
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // --- 初始生成一个示例 ---
+    const id1 = createDomino(200, 300, "第一块多米诺骨牌");
+    const id2 = createDomino(550, 250, "引发了蝴蝶效应");
+    const id3 = createDomino(550, 350, "导致了必然结果");
+    addCurve(id1, id2);
+    addCurve(id1, id3);
+
+  </script>
+</body>
+</html>
